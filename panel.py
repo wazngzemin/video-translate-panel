@@ -111,15 +111,26 @@ def run_cmd(job, cmd, cwd=None, env=None):
     return p.returncode
 
 
-def claude_generate(job, prompt):
-    """调度 claude -p 生成文本（翻译 / markdown）。"""
-    p = subprocess.Popen(["claude", "-p", "--model", LLM_MODEL, "--output-format", "text"],
-                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE, text=True)
-    out, err = p.communicate(prompt)
-    if p.returncode != 0:
-        raise StepError("claude 调用失败：" + (err or "")[:300])
-    return strip_fences(out.strip())
+def claude_generate(job, prompt, retries=4):
+    """调度 claude -p 生成文本（翻译 / markdown），失败自动重试。"""
+    last = ""
+    for attempt in range(1, retries + 1):
+        p = subprocess.Popen(["claude", "-p", "--model", LLM_MODEL, "--output-format", "text"],
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, text=True)
+        try:
+            out, err = p.communicate(prompt, timeout=300)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            out, err = "", "超时"
+        # claude -p 出错时常把错误写到 stdout 且 returncode=1（如 socket closed）
+        if p.returncode == 0 and out.strip() and "API Error" not in out[:80]:
+            return strip_fences(out.strip())
+        last = ((out or "") + " " + (err or "")).strip()
+        if attempt < retries:
+            jlog(job, f"  claude 第 {attempt} 次失败（{last[:80]}），{3*attempt}s 后重试…")
+            time.sleep(3 * attempt)
+    raise StepError("claude 调用多次失败：" + last[:200])
 
 
 def strip_fences(t):
@@ -270,12 +281,19 @@ DOC_PROMPT = """下面是一段视频的转写文本。请整理成一篇干净�
 
 
 def translate_srt(job, src_srt, workdir, bilingual):
-    content = Path(src_srt).read_text(encoding="utf-8", errors="ignore")
+    text = Path(src_srt).read_text(encoding="utf-8", errors="ignore")
+    blocks = [b.strip() for b in re.split(r"\n\s*\n", text.strip()) if b.strip()]
     tmpl = BI_PROMPT if bilingual else ZH_PROMPT
-    jlog(job, f"调度 claude（{LLM_MODEL}）翻译字幕，请稍候…")
-    out = claude_generate(job, tmpl.format(content=content))
+    CHUNK = 100                      # 每段约 100 条字幕，避免一次性过大被掐断
+    total = (len(blocks) + CHUNK - 1) // CHUNK
+    jlog(job, f"调度 claude（{LLM_MODEL}）翻译字幕：共 {len(blocks)} 条，分 {total} 段")
+    parts = []
+    for idx in range(0, len(blocks), CHUNK):
+        grp = "\n\n".join(blocks[idx:idx + CHUNK])
+        jlog(job, f"  翻译第 {idx // CHUNK + 1}/{total} 段…")
+        parts.append(claude_generate(job, tmpl.format(content=grp)).strip())
     dst = workdir / ("bi.srt" if bilingual else "zh.srt")
-    dst.write_text(out + "\n", encoding="utf-8")
+    dst.write_text("\n\n".join(parts) + "\n", encoding="utf-8")
     jlog(job, f"翻译完成 -> {dst.name}")
     return str(dst)
 
