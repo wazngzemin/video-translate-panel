@@ -227,8 +227,11 @@ def extract_audio(job, video_path, workdir):
 # ---------- 转写 ----------
 def transcribe(job, audio_path, workdir):
     src_srt = workdir / "src.srt"
+    # HF_HUB_DISABLE_XET=1：关闭 Xet 协议，走普通 HTTP 下载模型。
+    # 否则国内拉 mlx-community 模型会卡死在 xethub CDN（实测）。
     run_cmd(job, ["python3", str(SCRIPTS / "transcribe_srt.py"), str(audio_path),
-                  "--output", str(src_srt)])
+                  "--output", str(src_srt)],
+            env={"HF_HUB_DISABLE_XET": "1"})
     if not src_srt.exists():
         raise StepError("转写完成但未生成 SRT")
     return str(src_srt)
