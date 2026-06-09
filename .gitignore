@@ -1,6 +1,7 @@
 # 运行期产物 / 本机配置
 output/
 config.json
+bin/          # 本机下载的带 libass 的 ffmpeg（由 setup.sh 提供）
 __pycache__/
 *.pyc
 scripts/data/

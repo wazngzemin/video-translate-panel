@@ -33,6 +33,27 @@ case "$OS" in
 esac
 
 echo ""
+echo "==> 检查 ffmpeg 是否带 libass（烧字幕必须）"
+NEED_LIBASS=1
+if command -v ffmpeg >/dev/null 2>&1 && ffmpeg -hide_banner -filters 2>/dev/null | grep -q " ass "; then
+  echo "    [OK] 系统 ffmpeg 自带 libass"
+  NEED_LIBASS=0
+fi
+if [ "$NEED_LIBASS" = 1 ]; then
+  echo "    [!] 系统 ffmpeg 缺 libass，下载带 libass 的静态版到 bin/"
+  mkdir -p bin
+  if [ "$OS" = "Darwin" ]; then
+    A="arm64"; [ "$ARCH" != "arm64" ] && A="amd64"
+    curl -L --max-time 180 "https://ffmpeg.martin-riedl.de/redirect/latest/macos/$A/release/ffmpeg.zip" -o /tmp/ff.zip \
+      && unzip -o /tmp/ff.zip -d bin/ >/dev/null && chmod +x bin/ffmpeg \
+      && xattr -dr com.apple.quarantine bin/ffmpeg 2>/dev/null \
+      && echo "    [OK] 已装 bin/ffmpeg（带 libass）" || echo "    [缺] 下载失败，请手动装带 libass 的 ffmpeg"
+  else
+    echo "    Linux：请装带 libass 的 ffmpeg，如 sudo apt install ffmpeg（apt 版通常带 libass）"
+  fi
+fi
+
+echo ""
 echo "==> 检查 Claude Code CLI（翻译/出文档需要它）"
 if command -v claude >/dev/null 2>&1; then
   echo "    [OK] $(claude --version 2>/dev/null | head -1)"

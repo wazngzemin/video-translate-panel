@@ -21,6 +21,22 @@ LLM_MODEL = os.environ.get("VIDEO_PANEL_MODEL", "sonnet")   # 翻译/出文档�
 PORT = int(os.environ.get("VIDEO_PANEL_PORT", "8765"))
 
 
+def _resolve_ffmpeg():
+    """优先用仓库内带 libass 的 ffmpeg（烧字幕必须 libass，系统 brew 版常缺）。"""
+    local = BASE / "bin" / "ffmpeg"
+    return str(local) if local.exists() else "ffmpeg"
+
+
+FFMPEG = _resolve_ffmpeg()
+
+
+def _vcodec_args():
+    """Mac 用 videotoolbox 硬件编码（快数倍），其它平台用 libx264。"""
+    if sys.platform == "darwin":
+        return ["-c:v", "h264_videotoolbox", "-b:v", "8000k"]
+    return ["-c:v", "libx264", "-preset", "medium", "-crf", "20"]
+
+
 def open_path(target):
     """跨平台打开文件/URL/文件夹。"""
     try:
@@ -302,10 +318,10 @@ def translate_srt(job, src_srt, workdir, bilingual):
 def burn_zh(job, video_path, zh_srt, out_path, workdir):
     style = ("FontName=PingFang SC,FontSize=18,PrimaryColour=&Hffffff,"
              "OutlineColour=&H80000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=28")
-    run_cmd(job, ["ffmpeg", "-y", "-i", str(video_path),
+    run_cmd(job, [FFMPEG, "-y", "-i", str(video_path),
                   "-vf", f"subtitles={Path(zh_srt).name}:force_style='{style}'",
-                  "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-                  "-c:a", "copy", str(out_path)], cwd=str(workdir))
+                  *_vcodec_args(), "-c:a", "aac", "-movflags", "+faststart",
+                  str(out_path)], cwd=str(workdir))
 
 
 def burn_bilingual(job, video_path, bi_srt, out_path, workdir):
@@ -313,10 +329,10 @@ def burn_bilingual(job, video_path, bi_srt, out_path, workdir):
     ass = workdir / "bi.ass"
     run_cmd(job, ["python3", str(BILINGUAL_ASS), Path(bi_srt).name,
                   "--output", ass.name, "--height", str(height)], cwd=str(workdir))
-    run_cmd(job, ["ffmpeg", "-y", "-i", str(video_path),
+    run_cmd(job, [FFMPEG, "-y", "-i", str(video_path),
                   "-vf", f"ass={ass.name}",
-                  "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-                  "-c:a", "copy", str(out_path)], cwd=str(workdir))
+                  *_vcodec_args(), "-c:a", "aac", "-movflags", "+faststart",
+                  str(out_path)], cwd=str(workdir))
 
 
 # ---------- 主流程 ----------
