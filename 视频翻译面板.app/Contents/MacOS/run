@@ -1,0 +1,31 @@
+#!/bin/bash
+# 启动「视频翻译面板」：若未运行则后台启动，然后打开浏览器
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.npm-global/bin:$HOME/Library/Python/3.9/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+URL="http://127.0.0.1:8765"
+
+# 解析仓库目录：.app/Contents/MacOS -> 上三级 = .app 所在目录（仓库根）
+HERE="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(cd "$HERE/../../.." && pwd)"
+PANEL="$REPO/panel.py"
+
+if [ ! -f "$PANEL" ]; then
+  osascript -e 'display alert "找不到 panel.py" message "请把本 App 放在 video-panel 仓库目录里。"'
+  exit 1
+fi
+
+# 已经在跑就直接开浏览器
+if ! curl -s -o /dev/null --max-time 1 "$URL/"; then
+  VIDEO_PANEL_NO_BROWSER=1 nohup /usr/bin/python3 "$PANEL" >"$REPO/panel.log" 2>&1 &
+fi
+
+# 等服务起来（最多 ~12 秒）
+for i in $(seq 1 24); do
+  curl -s -o /dev/null --max-time 1 "$URL/" && break
+  sleep 0.5
+done
+
+if curl -s -o /dev/null --max-time 1 "$URL/"; then
+  open "$URL"
+else
+  osascript -e 'display alert "面板启动失败" message "请查看仓库目录下的 panel.log 排查（多半是缺 python3 依赖）。"'
+fi

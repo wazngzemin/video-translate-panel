@@ -1,0 +1,8 @@
+#!/bin/bash
+# 停止「视频翻译面板」后台进程
+if pgrep -f "panel.py" >/dev/null 2>&1; then
+  pkill -f "panel.py" 2>/dev/null
+  osascript -e 'display notification "视频翻译面板已停止" with title "视频翻译面板"'
+else
+  osascript -e 'display notification "面板本来就没在运行" with title "视频翻译面板"'
+fi
