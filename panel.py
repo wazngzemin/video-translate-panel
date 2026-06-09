@@ -316,8 +316,8 @@ def translate_srt(job, src_srt, workdir, bilingual):
 
 # ---------- 烧录 ----------
 def burn_zh(job, video_path, zh_srt, out_path, workdir):
-    style = ("FontName=PingFang SC,FontSize=18,PrimaryColour=&Hffffff,"
-             "OutlineColour=&H80000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=28")
+    style = ("FontName=PingFang SC,FontSize=18,PrimaryColour=&H00FFFF,"
+             "OutlineColour=&H000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=28")
     run_cmd(job, [FFMPEG, "-y", "-i", str(video_path),
                   "-vf", f"subtitles={Path(zh_srt).name}:force_style='{style}'",
                   *_vcodec_args(), "-c:a", "aac", "-movflags", "+faststart",
